@@ -1,0 +1,18 @@
+services:
+  app:
+    image: toyama4649/kirameki-php-cli:latest
+    environment:
+      TZ: "Asia/Tokyo"
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+      - type: volume
+        source: user
+        target: /root
+    depends_on:
+      - redis
+  redis:
+    image: redis:alpine
+volumes:
+  user:
