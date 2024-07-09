@@ -3,16 +3,26 @@
 namespace Kirameki\Mutex;
 
 use Closure;
+use Kirameki\Mutex\Exceptions\MutexException;
 
-readonly class Lock
+class Lock
 {
     /**
-     * @param Closure($this): void $releaseFn
+     * @var bool
+     */
+    protected bool $released = false;
+
+    /**
+     * @param string $key
      * @param string $token
+     * @param float $startTimestamp
+     * @param Closure($this): mixed $releaseFn
      */
     public function __construct(
-        protected Closure $releaseFn,
-        public string $token,
+        public readonly string $key,
+        public readonly string $token,
+        public readonly float $startTimestamp,
+        protected readonly Closure $releaseFn,
     )
     {
     }
@@ -22,6 +32,12 @@ readonly class Lock
      */
     public function release(): void
     {
+        if ($this->released) {
+            throw new MutexException("Release was already called. (key: '{$this->key}')");
+        }
+
         ($this->releaseFn)($this);
+
+        $this->released = true;
     }
 }

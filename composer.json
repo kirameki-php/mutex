@@ -10,6 +10,7 @@
   },
   "require-dev": {
     "kirameki/dumper": "dev-main",
+    "kirameki/redis": "dev-main",
     "phpstan/phpstan": "~1",
     "phpunit/phpunit": "~10"
   },

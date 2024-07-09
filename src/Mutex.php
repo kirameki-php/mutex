@@ -2,20 +2,40 @@
 
 namespace Kirameki\Mutex;
 
+use Closure;
+
 abstract class Mutex
 {
     /**
+     * @template TResult
+     * @param string $key
+     * @param Closure(): TResult $callback
      * @param float $waitSeconds
-     * @param string|null $token
-     * @return Lock
+     * @return TResult
      */
-    abstract public function acquire(float $waitSeconds = 60.0, string $token = null): Lock;
+    public function synchronize(string $key, Closure $callback, float $waitSeconds = 60.0): mixed
+    {
+        $lock = $this->acquire($key, $waitSeconds);
+        try {
+            return $callback();
+        } finally {
+            $this->release($lock);
+        }
+    }
 
     /**
-     * @param string|null $token
+     * @param string $key
+     * @param float $expireSeconds
+     * @param float $waitSeconds
+     * @return Lock
+     */
+    abstract public function acquire(string $key, float $expireSeconds, float $waitSeconds = 60.0): Lock;
+
+    /**
+     * @param string $key
      * @return Lock|null
      */
-    abstract public function tryAcquire(?string $token = null): ?Lock;
+    abstract public function tryAcquire(string $key): ?Lock;
 
     /**
      * @param Lock $lock
