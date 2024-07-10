@@ -37,7 +37,7 @@ class RedisMutex extends Mutex
                 return $lock;
             }
 
-            if ($this->isWaitTimeout($lock, $waitSeconds)) {
+            if ($this->waitTimeExceeded($lock, $waitSeconds)) {
                 throw new MutexException('Failed to acquire lock within the time limit.');
             }
 
@@ -100,7 +100,7 @@ class RedisMutex extends Mutex
      * @param float $waitSeconds
      * @return bool
      */
-    protected function isWaitTimeout(Lock $lock, float $waitSeconds): bool
+    protected function waitTimeExceeded(Lock $lock, float $waitSeconds): bool
     {
         $diff = $this->getHrTimestamp() - $lock->startTimestamp;
         return $diff >= $waitSeconds;
