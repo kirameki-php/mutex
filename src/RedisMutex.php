@@ -2,6 +2,7 @@
 
 namespace Kirameki\Mutex;
 
+use Kirameki\Core\Sleep;
 use Kirameki\Mutex\Exceptions\MutexException;
 use Kirameki\Redis\Options\SetMode;
 use Kirameki\Redis\RedisConnection;
@@ -11,13 +12,17 @@ use function hrtime;
 
 class RedisMutex extends Mutex
 {
+    protected Sleep $sleep;
+
     public function __construct(
         protected RedisConnection $connection,
         protected Randomizer $randomizer,
         protected string $prefix = 'mutex:',
         protected int $retryIntervalMilliSeconds = 10,
+        ?Sleep $sleep = null,
     )
     {
+        $this->sleep = $sleep ?? new Sleep();
     }
 
     /**
