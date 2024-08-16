@@ -4,55 +4,77 @@ namespace Kirameki\Mutex;
 
 use Kirameki\Core\Sleep;
 use Kirameki\Mutex\Exceptions\MutexException;
+use Kirameki\Mutex\Exceptions\MutexTimeoutException;
 use Kirameki\Redis\Options\SetMode;
 use Kirameki\Redis\RedisConnection;
 use Random\Randomizer;
 use function bin2hex;
 use function hrtime;
+use function min;
 
 class RedisMutex extends Mutex
 {
+    /**
+     * @var Randomizer
+     */
+    protected Randomizer $randomizer;
+
+    /**
+     * @var Sleep
+     */
     protected Sleep $sleep;
 
+    /**
+     * @param RedisConnection $connection
+     * @param string $prefix
+     * @param int $retryIntervalMilliseconds
+     * @param int $retryMaxIntervalMilliseconds
+     * @param float $retryBackoffMultiplier
+     * @param Randomizer|null $randomizer
+     * @param Sleep|null $sleep
+     */
     public function __construct(
         protected RedisConnection $connection,
-        protected Randomizer $randomizer,
         protected string $prefix = 'mutex:',
-        protected int $retryIntervalMilliSeconds = 10,
+        protected int $retryIntervalMilliseconds = 10,
+        protected int $retryMaxIntervalMilliseconds = 100,
+        protected float $retryBackoffMultiplier = 2.0,
+        Randomizer $randomizer = null,
         ?Sleep $sleep = null,
     )
     {
+        $this->randomizer = $randomizer ?? new Randomizer();
         $this->sleep = $sleep ?? new Sleep();
     }
 
     /**
-     * @param string $key
-     * @param float $expireSeconds
-     * @param float $waitSeconds
-     * @return Lock
+     * @inheritDoc
      */
-    public function acquire(string $key, float $expireSeconds = 60.0, float $waitSeconds = 60.0): Lock
+    public function acquire(string $key, float $timeoutSeconds = 1.0, int $expireSeconds = 60): Lock
     {
         $lock = $this->instantiateLock($key);
 
+        $tries = 1;
         while (true) {
-            // TODO allow px
-            $result = $this->connection->set($lock->key, '_', SetMode::Nx, ex: (int) $expireSeconds);
+            $result = $this->connection->set($lock->key, '_', SetMode::Nx, ex: $expireSeconds);
             if ($result !== false) {
                 return $lock;
             }
 
-            if ($this->waitTimeExceeded($lock, $waitSeconds)) {
-                throw new MutexException('Failed to acquire lock within the time limit.');
+            if ($this->waitTimeExceeded($lock, $timeoutSeconds)) {
+                throw new MutexTimeoutException(
+                    "Mutex acquire timeout. (key: '{$lock->key}', waitSeconds: {$timeoutSeconds})",
+                );
             }
 
-            usleep($this->retryIntervalMilliSeconds * 1000);
+            $sleepMs = $this->retryIntervalMilliseconds * ($tries ** $this->retryBackoffMultiplier);
+            $this->sleep->milliseconds(min($sleepMs, $this->retryMaxIntervalMilliseconds));
+            $tries++;
         }
     }
 
     /**
-     * @param string $key
-     * @return Lock|null
+     * @inheritDoc
      */
     public function tryAcquire(string $key): ?Lock
     {
@@ -76,8 +98,7 @@ class RedisMutex extends Mutex
     }
 
     /**
-     * @param Lock $lock
-     * @return void
+     * @inheritDoc
      */
     protected function release(Lock $lock): void
     {
