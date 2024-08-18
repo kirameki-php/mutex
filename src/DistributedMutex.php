@@ -2,7 +2,6 @@
 
 namespace Kirameki\Mutex;
 
-class MutexManager
+interface DistributedMutex extends Mutex
 {
-
 }

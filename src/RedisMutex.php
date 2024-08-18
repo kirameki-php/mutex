@@ -2,7 +2,9 @@
 
 namespace Kirameki\Mutex;
 
+use Closure;
 use Kirameki\Core\Sleep;
+use Kirameki\Mutex\Configs\RedisMutexConfig;
 use Kirameki\Mutex\Exceptions\MutexException;
 use Kirameki\Mutex\Exceptions\MutexTimeoutException;
 use Kirameki\Redis\Options\SetMode;
@@ -12,8 +14,13 @@ use function bin2hex;
 use function hrtime;
 use function min;
 
-class RedisMutex extends Mutex
+class RedisMutex implements DistributedMutex
 {
+    /**
+     * @var RedisMutexConfig
+     */
+    protected RedisMutexConfig $config;
+
     /**
      * @var Randomizer
      */
@@ -26,25 +33,33 @@ class RedisMutex extends Mutex
 
     /**
      * @param RedisConnection $connection
-     * @param string $prefix
-     * @param int $retryIntervalMilliseconds
-     * @param int $retryMaxIntervalMilliseconds
-     * @param float $retryBackoffMultiplier
+     * @param RedisMutexConfig|null $config
      * @param Randomizer|null $randomizer
      * @param Sleep|null $sleep
      */
     public function __construct(
         protected RedisConnection $connection,
-        protected string $prefix = 'mutex:',
-        protected int $retryIntervalMilliseconds = 10,
-        protected int $retryMaxIntervalMilliseconds = 100,
-        protected float $retryBackoffMultiplier = 2.0,
-        Randomizer $randomizer = null,
+        ?RedisMutexConfig $config = null,
+        ?Randomizer $randomizer = null,
         ?Sleep $sleep = null,
     )
     {
+        $this->config = $config ?? new RedisMutexConfig();
         $this->randomizer = $randomizer ?? new Randomizer();
         $this->sleep = $sleep ?? new Sleep();
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function synchronize(string $key, Closure $callback, float $timeoutSeconds = 1.0, int $expireSeconds = 60): mixed
+    {
+        $lock = $this->acquire($key, $timeoutSeconds, $expireSeconds);
+        try {
+            return $callback();
+        } finally {
+            $this->release($lock);
+        }
     }
 
     /**
@@ -67,8 +82,11 @@ class RedisMutex extends Mutex
                 );
             }
 
-            $sleepMs = $this->retryIntervalMilliseconds * ($tries ** $this->retryBackoffMultiplier);
-            $this->sleep->milliseconds(min($sleepMs, $this->retryMaxIntervalMilliseconds));
+            $interval = $this->config->retryIntervalMilliseconds;
+            $maxInterval = $this->config->retryMaxIntervalMilliseconds;
+            $backoffMultiplier = $this->config->retryBackoffMultiplier;
+            $sleepMs = $interval * ($tries ** $backoffMultiplier);
+            $this->sleep->milliseconds(min($sleepMs, $maxInterval));
             $tries++;
         }
     }
@@ -100,7 +118,7 @@ class RedisMutex extends Mutex
     /**
      * @inheritDoc
      */
-    protected function release(Lock $lock): void
+    public function release(Lock $lock): void
     {
         $script = $this->getReleaseScript();
         $result = $this->connection->eval($script, 1, $lock->key, $lock->token);

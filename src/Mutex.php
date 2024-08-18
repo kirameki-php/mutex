@@ -5,7 +5,7 @@ namespace Kirameki\Mutex;
 use Closure;
 use Kirameki\Mutex\Exceptions\MutexTimeoutException;
 
-abstract class Mutex
+interface Mutex
 {
     /**
      * @template TResult
@@ -15,15 +15,7 @@ abstract class Mutex
      * @param int $expireSeconds
      * @return TResult
      */
-    public function synchronize(string $key, Closure $callback, float $timeoutSeconds = 1.0, int $expireSeconds = 60): mixed
-    {
-        $lock = $this->acquire($key, $timeoutSeconds, $expireSeconds);
-        try {
-            return $callback();
-        } finally {
-            $this->release($lock);
-        }
-    }
+    public function synchronize(string $key, Closure $callback, float $timeoutSeconds = 1.0, int $expireSeconds = 60);
 
     /**
      * @param string $key
@@ -32,17 +24,17 @@ abstract class Mutex
      * @return Lock
      * @throws MutexTimeoutException
      */
-    abstract public function acquire(string $key, float $timeoutSeconds = 1.0, int $expireSeconds = 60): Lock;
+    public function acquire(string $key, float $timeoutSeconds = 1.0, int $expireSeconds = 60): Lock;
 
     /**
      * @param string $key
      * @return Lock|null
      */
-    abstract public function tryAcquire(string $key): ?Lock;
+    public function tryAcquire(string $key): ?Lock;
 
     /**
      * @param Lock $lock
      * @return void
      */
-    abstract protected function release(Lock $lock): void;
+    public function release(Lock $lock): void;
 }
