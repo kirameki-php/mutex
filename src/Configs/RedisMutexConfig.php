@@ -5,12 +5,14 @@ namespace Kirameki\Mutex\Configs;
 class RedisMutexConfig
 {
     /**
+     * @param string $connection
      * @param string $prefix
      * @param int $retryIntervalMilliseconds
      * @param int $retryMaxIntervalMilliseconds
      * @param float $retryBackoffMultiplier
      */
     public function __construct(
+        public string $connection,
         public string $prefix = 'mutex:',
         public int $retryIntervalMilliseconds = 10,
         public int $retryMaxIntervalMilliseconds = 100,

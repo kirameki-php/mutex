@@ -17,11 +17,6 @@ use function min;
 class RedisMutex implements DistributedMutex
 {
     /**
-     * @var RedisMutexConfig
-     */
-    protected RedisMutexConfig $config;
-
-    /**
      * @var Randomizer
      */
     protected Randomizer $randomizer;
@@ -33,18 +28,18 @@ class RedisMutex implements DistributedMutex
 
     /**
      * @param RedisConnection $connection
-     * @param RedisMutexConfig|null $config
+     * @param RedisMutexConfig $config
      * @param Randomizer|null $randomizer
      * @param Sleep|null $sleep
      */
     public function __construct(
         protected RedisConnection $connection,
-        ?RedisMutexConfig $config = null,
+        protected RedisMutexConfig $config,
         ?Randomizer $randomizer = null,
         ?Sleep $sleep = null,
     )
     {
-        $this->config = $config ?? new RedisMutexConfig();
+        $this->config = $config;
         $this->randomizer = $randomizer ?? new Randomizer();
         $this->sleep = $sleep ?? new Sleep();
     }
