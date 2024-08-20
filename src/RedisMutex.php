@@ -9,6 +9,7 @@ use Kirameki\Mutex\Exceptions\MutexException;
 use Kirameki\Mutex\Exceptions\MutexTimeoutException;
 use Kirameki\Redis\Options\SetMode;
 use Kirameki\Redis\RedisConnection;
+use Kirameki\Redis\RedisManager;
 use Random\Randomizer;
 use function bin2hex;
 use function hrtime;
@@ -16,6 +17,11 @@ use function min;
 
 class RedisMutex implements DistributedMutex
 {
+    /**
+     * @var RedisConnection|null
+     */
+    protected ?RedisConnection $redis = null;
+
     /**
      * @var Randomizer
      */
@@ -27,19 +33,18 @@ class RedisMutex implements DistributedMutex
     protected Sleep $sleep;
 
     /**
-     * @param RedisConnection $connection
+     * @param RedisManager $redisManager
      * @param RedisMutexConfig $config
      * @param Randomizer|null $randomizer
      * @param Sleep|null $sleep
      */
     public function __construct(
-        protected RedisConnection $connection,
+        protected RedisManager $redisManager,
         protected RedisMutexConfig $config,
         ?Randomizer $randomizer = null,
         ?Sleep $sleep = null,
     )
     {
-        $this->config = $config;
         $this->randomizer = $randomizer ?? new Randomizer();
         $this->sleep = $sleep ?? new Sleep();
     }
@@ -66,7 +71,7 @@ class RedisMutex implements DistributedMutex
 
         $tries = 1;
         while (true) {
-            $result = $this->connection->set($lock->key, '_', SetMode::Nx, ex: $expireSeconds);
+            $result = $this->getRedis()->set($lock->key, '_', SetMode::Nx, ex: $expireSeconds);
             if ($result !== false) {
                 return $lock;
             }
@@ -77,9 +82,10 @@ class RedisMutex implements DistributedMutex
                 );
             }
 
-            $interval = $this->config->retryIntervalMilliseconds;
-            $maxInterval = $this->config->retryMaxIntervalMilliseconds;
-            $backoffMultiplier = $this->config->retryBackoffMultiplier;
+            $config = $this->config;
+            $interval = $config->retryIntervalMilliseconds;
+            $maxInterval = $config->retryMaxIntervalMilliseconds;
+            $backoffMultiplier = $config->retryBackoffMultiplier;
             $sleepMs = $interval * ($tries ** $backoffMultiplier);
             $this->sleep->milliseconds(min($sleepMs, $maxInterval));
             $tries++;
@@ -92,7 +98,7 @@ class RedisMutex implements DistributedMutex
     public function tryAcquire(string $key): ?Lock
     {
         $lock = $this->instantiateLock($key);
-        $result = $this->connection->set($lock->key, $lock->token, SetMode::Nx);
+        $result = $this->getRedis()->set($lock->key, $lock->token, SetMode::Nx);
         if ($result === false) {
             return null;
         }
@@ -116,7 +122,7 @@ class RedisMutex implements DistributedMutex
     public function release(Lock $lock): void
     {
         $script = $this->getReleaseScript();
-        $result = $this->connection->eval($script, 1, $lock->key, $lock->token);
+        $result = $this->getRedis()->eval($script, 1, $lock->key, $lock->token);
 
         switch ($result) {
             case -1:
@@ -143,6 +149,14 @@ class RedisMutex implements DistributedMutex
     {
         $diff = $this->getHrTimestamp() - $lock->startTimestamp;
         return $diff >= $waitSeconds;
+    }
+
+    /**
+     * @return RedisConnection
+     */
+    protected function getRedis(): RedisConnection
+    {
+        return $this->redis ??= $this->redisManager->use($this->config->connection);
     }
 
     /**
