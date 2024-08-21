@@ -2,18 +2,16 @@
 
 namespace Kirameki\Mutex\Configs;
 
-class RedisMutexConfig extends MutexConfig
+class FileMutexConfig extends MutexConfig
 {
     /**
-     * @param string $connection
-     * @param string $prefix
+     * @param string $basePath
      * @param int $retryIntervalMilliseconds
      * @param int $retryMaxIntervalMilliseconds
      * @param float $retryBackoffMultiplier
      */
     public function __construct(
-        public string $connection,
-        public string $prefix = 'mutex:',
+        public string $basePath,
         int $retryIntervalMilliseconds = 10,
         int $retryMaxIntervalMilliseconds = 100,
         float $retryBackoffMultiplier = 2.0,
