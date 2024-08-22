@@ -143,7 +143,7 @@ abstract class AbstractMutex implements Mutex
     protected function throwTokenMismatchException(Lock $lock, string $token): never
     {
         throw new MutexException(
-            "Token did not match. (key: '{$lock->key}', expected: '{$lock->token}' actual: '{$token}')",
+            "Token mismatch. (key: '{$lock->key}', expected: '{$lock->token}' actual: '{$token}')",
         );
     }
 
