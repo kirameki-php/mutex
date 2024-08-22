@@ -63,7 +63,7 @@ class RedisMutex extends AbstractMutex implements DistributedMutex
             else
                 return 0
             end
-        LUA;
+            LUA;
 
         $redis = $this->getRedis();
         $result = $redis->eval($script, 1, $lock->key, $lock->token);

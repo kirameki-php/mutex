@@ -4,7 +4,6 @@ namespace Kirameki\Mutex;
 
 use Kirameki\Core\Sleep;
 use Kirameki\Mutex\Configs\FileMutexConfig;
-use Kirameki\Mutex\Exceptions\MutexException;
 use Override;
 use Random\Randomizer;
 use function fclose;
@@ -12,9 +11,11 @@ use function flock;
 use function fopen;
 use function fread;
 use function fwrite;
-use const DIRECTORY_SEPARATOR as DS;
+use function md5;
+use const DIRECTORY_SEPARATOR;
 use const LOCK_EX;
 use const LOCK_NB;
+use const LOCK_UN;
 use const PHP_INT_MAX;
 
 /**
@@ -25,7 +26,7 @@ class FileMutex extends AbstractMutex implements InterprocessMutex
     /**
      * @var resource|null
      */
-    protected $resource = null;
+    protected $stream = null;
 
     /**
      * @param FileMutexConfig $config
@@ -47,15 +48,14 @@ class FileMutex extends AbstractMutex implements InterprocessMutex
     #[Override]
     protected function tryLocking(Lock $lock): bool
     {
-        $filePath = $this->config->basePath . DS . $lock->key;
-        $file = fopen($filePath, 'w+');
-        if ($file !== false) {
-            if (flock($file, LOCK_EX | LOCK_NB)) {
-                fwrite($file, $lock->token);
-                $this->resource = $file;
+        $stream = fopen($this->keyToFilename($lock), 'w+');
+        if ($stream !== false) {
+            if (flock($stream, LOCK_EX | LOCK_NB)) {
+                fwrite($stream, $lock->token);
+                $this->stream = $stream;
                 return true;
             } else {
-                fclose($file);
+                fclose($stream);
             }
         }
         return false;
@@ -67,21 +67,33 @@ class FileMutex extends AbstractMutex implements InterprocessMutex
     #[Override]
     protected function release(Lock $lock): void
     {
-        $resource = $this->resource;
+        $stream = $this->stream;
 
-        if ($resource === null) {
+        if ($stream === null) {
             $this->throwLockAlreadyReleasedException($lock);
         }
 
-        $token = fread($resource, PHP_INT_MAX) ?: '';
+        $token = fread($stream, PHP_INT_MAX) ?: '';
 
         if ($lock->token !== $token) {
             $this->throwTokenMismatchException($lock, $token);
         }
 
-        flock($resource, LOCK_UN);
-        fclose($resource);
+        flock($stream, LOCK_UN);
+        fclose($stream);
 
-        $this->resource = null;
+        $this->stream = null;
+    }
+
+    /**
+     * @param Lock $lock
+     * @return string
+     */
+    protected function keyToFilename(Lock $lock): string
+    {
+        return $this->config->directory .
+            DIRECTORY_SEPARATOR .
+            $this->config->prefix .
+            md5($lock->key);
     }
 }
