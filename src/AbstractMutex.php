@@ -17,6 +17,8 @@ use function min;
  */
 abstract class AbstractMutex implements Mutex
 {
+    protected const int TokenBytes = 8;
+
     /**
      * @var Randomizer
      */
@@ -56,14 +58,16 @@ abstract class AbstractMutex implements Mutex
     }
 
     /**
-     * @inheritDoc
+     * @param string $key
+     * @param float $timeoutSeconds
+     * @param int $expireSeconds
+     * @return Lock
      */
     protected function acquire(string $key, float $timeoutSeconds = 1.0, int $expireSeconds = 60): Lock
     {
         $tries = 1;
         while (true) {
-            $lock = $this->instantiateLock($key);
-
+            $lock = $this->instantiateLock($key, $expireSeconds);
             if ($this->tryLocking($lock)) {
                 return $lock;
             }
@@ -87,9 +91,9 @@ abstract class AbstractMutex implements Mutex
     /**
      * @inheritDoc
      */
-    public function tryAcquire(string $key): ?Lock
+    public function tryAcquire(string $key, int $expireSeconds = 60): ?Lock
     {
-        $lock = $this->instantiateLock($key);
+        $lock = $this->instantiateLock($key, $expireSeconds);
         if ($this->tryLocking($lock)) {
             return $lock;
         }
@@ -98,13 +102,16 @@ abstract class AbstractMutex implements Mutex
 
     /**
      * @param string $key
+     * @param int $expireSeconds
      * @return Lock
      */
-    protected function instantiateLock(string $key): Lock
+    protected function instantiateLock(string $key, int $expireSeconds): Lock
     {
-        $token = bin2hex($this->randomizer->getBytes(16));
+        $token = bin2hex($this->randomizer->getBytes(self::TokenBytes));
         $startTimestamp = $this->getHrTimestamp();
-        return new Lock($key, $token, $startTimestamp, $this->release(...));
+        $expireTimestamp = (int)($startTimestamp + $expireSeconds);
+        $releaseFn = $this->release(...);
+        return new Lock($key, $token, $startTimestamp, $expireTimestamp, $releaseFn);
     }
 
     /**

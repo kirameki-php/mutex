@@ -6,17 +6,19 @@ use Kirameki\Core\Sleep;
 use Kirameki\Mutex\Configs\FileMutexConfig;
 use Override;
 use Random\Randomizer;
+use function assert;
 use function fclose;
 use function flock;
 use function fopen;
 use function fread;
+use function fseek;
 use function fwrite;
 use function md5;
+use function unlink;
 use const DIRECTORY_SEPARATOR;
 use const LOCK_EX;
 use const LOCK_NB;
 use const LOCK_UN;
-use const PHP_INT_MAX;
 
 /**
  * @extends AbstractMutex<FileMutexConfig>
@@ -27,6 +29,8 @@ class FileMutex extends AbstractMutex implements InterprocessMutex
      * @var resource|null
      */
     protected $stream = null;
+
+    protected ?string $streamPath = null;
 
     /**
      * @param FileMutexConfig $config
@@ -48,11 +52,13 @@ class FileMutex extends AbstractMutex implements InterprocessMutex
     #[Override]
     protected function tryLocking(Lock $lock): bool
     {
-        $stream = fopen($this->keyToFilename($lock), 'w+');
+        $streamPath = $this->keyToFilename($lock);
+        $stream = fopen($streamPath, 'w+');
         if ($stream !== false) {
             if (flock($stream, LOCK_EX | LOCK_NB)) {
                 fwrite($stream, $lock->token);
                 $this->stream = $stream;
+                $this->streamPath = $streamPath;
                 return true;
             } else {
                 fclose($stream);
@@ -73,7 +79,8 @@ class FileMutex extends AbstractMutex implements InterprocessMutex
             $this->throwLockAlreadyReleasedException($lock);
         }
 
-        $token = fread($stream, PHP_INT_MAX) ?: '';
+        fseek($stream, 0);
+        $token = fread($stream, self::TokenBytes * 2) ?: '';
 
         if ($lock->token !== $token) {
             $this->throwTokenMismatchException($lock, $token);
@@ -82,7 +89,11 @@ class FileMutex extends AbstractMutex implements InterprocessMutex
         flock($stream, LOCK_UN);
         fclose($stream);
 
+        assert($this->streamPath !== null);
+        unlink($this->streamPath);
+
         $this->stream = null;
+        $this->streamPath = null;
     }
 
     /**

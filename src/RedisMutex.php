@@ -2,6 +2,7 @@
 
 namespace Kirameki\Mutex;
 
+use DateTimeImmutable;
 use Kirameki\Core\Sleep;
 use Kirameki\Mutex\Configs\RedisMutexConfig;
 use Kirameki\Redis\Options\SetMode;
@@ -42,7 +43,10 @@ class RedisMutex extends AbstractMutex implements DistributedMutex
     #[Override]
     public function tryLocking(Lock $lock): bool
     {
-        return $this->getRedis()->set($lock->key, $lock->token, SetMode::Nx) !== false;
+        $key = $lock->key;
+        $token = $lock->token;
+        $exAt = new DateTimeImmutable('@' . $lock->expireTimestamp);
+        return $this->getRedis()->set($key, $token, SetMode::Nx, exAt: $exAt) !== false;
     }
 
     /**
@@ -75,7 +79,6 @@ class RedisMutex extends AbstractMutex implements DistributedMutex
                 $this->throwTokenMismatchException($lock, $redis->get($lock->key));
         }
     }
-
 
     /**
      * @return RedisConnection

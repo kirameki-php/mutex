@@ -16,12 +16,14 @@ class Lock
      * @param string $key
      * @param string $token
      * @param float $startTimestamp
+     * @param int $expireTimestamp
      * @param Closure($this): mixed $releaseFn
      */
     public function __construct(
         public readonly string $key,
         public readonly string $token,
         public readonly float $startTimestamp,
+        public readonly int $expireTimestamp,
         protected readonly Closure $releaseFn,
     )
     {

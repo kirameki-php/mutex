@@ -3,7 +3,6 @@
 namespace Kirameki\Mutex;
 
 use Closure;
-use Kirameki\Mutex\Exceptions\MutexTimeoutException;
 
 interface Mutex
 {
